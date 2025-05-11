@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Healthy Snake Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #111;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      background: #222;
+    }
+    #score {
+      position: absolute;
+      top: 20px;
+      right: 30px;
+      font-size: 36px;
+      font-weight: bold;
+      font-family: Arial, sans-serif;
+      color: #00ff88;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 10px 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px #00ff88;
+      transition: color 0.3s ease;
+      z-index: 5;
+    }
+    #score.red {
+      color: red;
+      box-shadow: 0 0 10px red;
+    }
+    #startBtn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px 40px;
+      font-size: 24px;
+      font-weight: bold;
+      background: #00ff88;
+      border: none;
+      border-radius: 10px;
+      box-shadow: 0 0 15px #00ff88;
+      cursor: pointer;
+      z-index: 10;
+    }
+    .controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      display: grid;
+      grid-template-columns: 60px 60px 60px;
+      grid-template-rows: 60px 60px;
+      gap: 10px;
+      opacity: 0.5;
+      z-index: 10;
+    }
+    .btn {
+      width: 60px;
+      height: 60px;
+      background: white;
+      border-radius: 10px;
+      font-size: 30px;
+      text-align: center;
+      line-height: 60px;
+      user-select: none;
+      font-weight: bold;
+    }
+    .empty {
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+<button id="startBtn">Start Game</button>
+<canvas id="game"></canvas>
+<div id="score">Score: 0</div>
+
+<!-- Kontrol untuk Mobile -->
+<div class="controls">
+  <div class="empty"></div>
+  <div class="btn" id="up">↑</div>
+  <div class="empty"></div>
+  <div class="btn" id="left">←</div>
+  <div class="btn" id="down">↓</div>
+  <div class="btn" id="right">→</div>
+</div>
+
+<!-- Suara -->
+<audio id="bgm" src="https://www.myinstants.com/media/sounds/hu-biip-mijun.mp3" loop></audio>
+<audio id="eat" src="https://www.myinstants.com/media/sounds/munch-sound-effect.mp3"></audio>
+<audio id="junk" src="https://www.myinstants.com/media/sounds/mac-quack.mp3"></audio>
+<audio id="dead" src="https://www.myinstants.com/media/sounds/8d82b5_new_super_mario_bros_death_sound_effect.mp3"></audio>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const scoreDisplay = document.getElementById('score');
+
+const bgm = document.getElementById('bgm');
+const eatSound = document.getElementById('eat');
+const junkSound = document.getElementById('junk');
+const deadSound = document.getElementById('dead');
+
+const startBtn = document.getElementById('startBtn');
+
+const gridSize = 20;
+let tileCountX, tileCountY;
+
+function resizeCanvas() {
+  canvas.width = Math.floor(window.innerWidth / gridSize) * gridSize;
+  canvas.height = Math.floor(window.innerHeight / gridSize) * gridSize;
+  tileCountX = canvas.width / gridSize;
+  tileCountY = canvas.height / gridSize;
+}
+resizeCanvas();
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  resetGame();
+});
+
+const foodImages = {
+  fruit: ['🍒', '🍈', '🍉'],
+  veggie: ['🥦', '🥕', '🌽'],
+  junk: ['🍔', '🍟', '🍕']
+};
+
+let snake = [];
+let velocity = { x: 0, y: 0 };
+let foods = [];
+let tailGrow = 0;
+let junkEffect = false;
+let score = 0;
+
+let gameInterval = null;
+
+function initSnake() {
+  snake = [];
+  let startX = Math.floor(tileCountX / 2);
+  let startY = Math.floor(tileCountY / 2);
+  for (let i = 0; i < 5; i++) {
+    snake.push({ x: startX - i, y: startY });
+  }
+}
+
+function spawnFoods() {
+  const totalTiles = tileCountX * tileCountY;
+  const foodCount = Math.max(1, Math.floor(totalTiles * 0.02));
+
+  foods = [];
+  const occupied = new Set(snake.map(s => `${s.x},${s.y}`));
+
+  while (foods.length < foodCount) {
+    const x = Math.floor(Math.random() * tileCountX);
+    const y = Math.floor(Math.random() * tileCountY);
+    const key = `${x},${y}`;
+    if (occupied.has(key)) continue;
+
+    let typeChance = Math.random();
+    let type = 'fruit';
+    if (typeChance < 0.6) type = 'fruit';
+    else if (typeChance < 0.9) type = 'veggie';
+    else type = 'junk';
+
+    foods.push({
+      x, y, type,
+      icon: foodImages[type][Math.floor(Math.random() * foodImages[type].length)]
+    });
+    occupied.add(key);
+  }
+}
+
+function setDirection(newVel) {
+  if ((newVel.x !== 0 && velocity.x === 0) || (newVel.y !== 0 && velocity.y === 0)) {
+    velocity = newVel;
+    if (!gameInterval) {
+      gameInterval = setInterval(gameLoop, 200);
+    }
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp') setDirection({ x: 0, y: -1 });
+  if (e.key === 'ArrowDown') setDirection({ x: 0, y: 1 });
+  if (e.key === 'ArrowLeft') setDirection({ x: -1, y: 0 });
+  if (e.key === 'ArrowRight') setDirection({ x: 1, y: 0 });
+});
+
+document.getElementById('up').onclick = () => setDirection({ x: 0, y: -1 });
+document.getElementById('down').onclick = () => setDirection({ x: 0, y: 1 });
+document.getElementById('left').onclick = () => setDirection({ x: -1, y: 0 });
+document.getElementById('right').onclick = () => setDirection({ x: 1, y: 0 });
+
+function updateScoreDisplay() {
+  scoreDisplay.textContent = `Score: ${score}`;
+}
+
+function resetGame() {
+  deadSound.play();
+  alert("Game Over!");
+  clearInterval(gameInterval);
+  gameInterval = null;
+  velocity = { x: 0, y: 0 };
+  score = 0;
+  tailGrow = 0;
+  junkEffect = false;
+  updateScoreDisplay();
+  scoreDisplay.classList.remove('red');
+  initSnake();
+  spawnFoods();
+  draw();
+}
+
+function gameLoop() {
+  const head = { ...snake[0] };
+  head.x += velocity.x;
+  head.y += velocity.y;
+
+  if (head.x < 0 || head.y < 0 || head.x >= tileCountX || head.y >= tileCountY) {
+    resetGame();
+    return;
+  }
+
+  snake.unshift(head);
+
+  let eatenIndex = foods.findIndex(f => f.x === head.x && f.y === head.y);
+  if (eatenIndex !== -1) {
+    const eaten = foods.splice(eatenIndex, 1)[0];
+    if (eaten.type === 'junk') {
+      junkSound.play();
+      score = Math.max(0, score - 1);
+      tailGrow = -2;
+      junkEffect = true;
+      scoreDisplay.classList.add('red');
+      setTimeout(() => {
+        junkEffect = false;
+        scoreDisplay.classList.remove('red');
+      }, 500);
+    } else {
+      eatSound.play();
+      score++;
+      tailGrow++;
+    }
+    updateScoreDisplay();
+  }
+
+  if (foods.length === 0) {
+    spawnFoods();
+  }
+
+  if (tailGrow > 0) {
+    tailGrow--;
+  } else if (tailGrow < 0) {
+    snake.pop();
+    if (snake.length > 1) snake.pop();
+    tailGrow = 0;
+  } else {
+    snake.pop();
+  }
+
+  draw();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = "20px Arial";
+
+  foods.forEach(f => {
+    ctx.fillText(f.icon, f.x * gridSize + 4, f.y * gridSize + 18);
+  });
+
+  for (let i = 0; i < snake.length; i++) {
+    const s = snake[i];
+    ctx.fillStyle = junkEffect ? 'red' : 'lime';
+    ctx.fillRect(s.x * gridSize, s.y * gridSize, gridSize, gridSize);
+  }
+}
+
+startBtn.addEventListener('click', () => {
+  startBtn.style.display = 'none';
+  bgm.volume = 0.3;
+  bgm.play();
+  initSnake();
+  spawnFoods();
+  draw();
+});
+</script>
+</body>
+</html>
