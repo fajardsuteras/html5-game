@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Language Café Simulation</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      background-color: #fdf6e3;
+      overflow: hidden;
+    }
+    header {
+      background-color: #f8c291;
+      padding: 10px;
+      text-align: center;
+      font-size: 2em;
+      color: #fff;
+      font-weight: bold;
+    }
+    #gameCanvas {
+      display: block;
+      margin: 0 auto;
+      background: url('https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS_LGIl37zX8VNOxqEJLgpAd_nOncn0AoiTsw&s') no-repeat center center;
+      background-size: cover;
+      width: 100vw;
+      height: 90vh;
+      position: relative;
+    }
+    .customer {
+      position: absolute;
+      bottom: 10%;
+      left: 5%;
+      width: 100px;
+      transition: all 0.3s ease;
+    }
+    .order-box {
+      position: absolute;
+      bottom: 35%;
+      left: 5%;
+      background: #fff3cd;
+      padding: 10px;
+      border-radius: 10px;
+      border: 2px solid #f0ad4e;
+      font-size: 1em;
+      max-width: 300px;
+      box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+    }
+    .romaji {
+      font-size: 0.9em;
+      color: #555;
+      margin-top: 5px;
+    }
+    .menu-items {
+      position: absolute;
+      right: 5%;
+      bottom: 10%;
+      display: grid;
+      grid-template-columns: repeat(2, 100px);
+      gap: 15px;
+    }
+    .menu-item {
+      background: #fff;
+      border: 2px solid #ccc;
+      border-radius: 10px;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      box-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+    }
+    .reaction {
+      position: absolute;
+      top: 10%;
+      left: 5%;
+      background-color: #ffecb3;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 1em;
+      animation: fadeOut 2s forwards;
+    }
+    @keyframes fadeOut {
+      0% { opacity: 1; }
+      100% { opacity: 0; top: 0%; }
+    }
+  </style>
+</head>
+<body>
+  <header>Language Café Simulation</header>
+  <div id="gameCanvas">
+    <img src="https://images.icon-icons.com/4182/PNG/512/avatar_person_character_fashion_clothes_jacket_sweater_beautiful_long_hairstyle_blue_hair_hoodie_orange_girls_lady_female_woman_icon_262230.png" alt="Customer" class="customer" id="customer" />
+    <div class="order-box" id="orderBox"></div>
+    <div class="menu-items">
+      <div class="menu-item" onclick="serveOrder('coffee')">☕ Coffee</div>
+      <div class="menu-item" onclick="serveOrder('tea')">🍵 Tea</div>
+      <div class="menu-item" onclick="serveOrder('cake')">🍰 Cake</div>
+      <div class="menu-item" onclick="serveOrder('ramen')">🍜 Ramen</div>
+    </div>
+  </div>
+
+  <audio id="correctSound" src="https://www.myinstants.com/media/sounds/answer-correct.mp3"></audio>
+  <audio id="wrongSound" src="https://www.myinstants.com/media/sounds/wrong-mark_VsmJWYU.mp3"></audio>
+
+  <script>
+    const orderBox = document.getElementById('orderBox');
+    const correctSound = document.getElementById('correctSound');
+    const wrongSound = document.getElementById('wrongSound');
+
+    const orders = [
+      // Japanese
+      { lang: 'jp', text: 'こんにちは！コーヒーをください！', romaji: 'Konnichiwa! Koohii wo kudasai!', item: 'coffee', success: 'ありがとう！', fail: 'えっ、それじゃないよ！' },
+      { lang: 'jp', text: 'ケーキをお願いします！', romaji: 'Keeki wo onegaishimasu!', item: 'cake', success: 'ありがとう！', fail: 'それはちがいます！' },
+      { lang: 'jp', text: 'ラーメンをひとつください。', romaji: 'Raamen wo hitotsu kudasai.', item: 'ramen', success: 'うまそう！', fail: 'ちがうちがう！' },
+
+      // English
+      { lang: 'en', text: 'Hi! I’d like some cake, please.', item: 'cake', success: 'Thanks a lot!', fail: 'Oops, that’s not what I wanted!' },
+      { lang: 'en', text: 'Could I get a coffee, please?', item: 'coffee', success: 'Perfect, thank you!', fail: 'Nope, not that!' },
+      { lang: 'en', text: 'One bowl of ramen, please!', item: 'ramen', success: 'That looks great!', fail: 'That’s not right!' },
+
+      // Korean
+      { lang: 'kr', text: '안녕하세요! 라면 주세요.', romaji: 'Annyeonghaseyo! Ramyeon juseyo.', item: 'ramen', success: '감사합니다!', fail: '이건 아니에요!' },
+      { lang: 'kr', text: '케이크 주세요.', romaji: 'Keikeu juseyo.', item: 'cake', success: '맛있겠다!', fail: '잘못 주셨어요!' },
+      { lang: 'kr', text: '커피 한 잔 주세요.', romaji: 'Keopi han jan juseyo.', item: 'coffee', success: '고마워요!', fail: '이건 아니에요!' },
+    ];
+
+    let currentOrder = 0;
+
+    function showOrder(order) {
+      let html = `<div>${order.text}</div>`;
+      if (order.lang === 'jp' || order.lang === 'kr') {
+        html += `<div class="romaji">${order.romaji}</div>`;
+      }
+      orderBox.innerHTML = html;
+    }
+
+    function showReaction(text) {
+      const reaction = document.createElement('div');
+      reaction.className = 'reaction';
+      reaction.textContent = text;
+      document.getElementById('gameCanvas').appendChild(reaction);
+      setTimeout(() => reaction.remove(), 2000);
+    }
+
+    function serveOrder(item) {
+      const order = orders[currentOrder];
+      if (item === order.item) {
+        correctSound.play();
+        showReaction(order.success);
+        currentOrder = (currentOrder + 1) % orders.length;
+        setTimeout(() => showOrder(orders[currentOrder]), 700);
+      } else {
+        wrongSound.play();
+        showReaction(order.fail);
+      }
+    }
+
+    // Initialize first order
+    showOrder(orders[currentOrder]);
+  </script>
+</body>
+</html>
